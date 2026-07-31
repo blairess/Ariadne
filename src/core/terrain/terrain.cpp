@@ -95,6 +95,17 @@ void Terrain::updateBuffers() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
+void Terrain::replaceMesh(int newWidth, int newDepth, float newCellSize,
+    const float* newVertices, size_t vertexCount,
+    const int* newIndices, size_t indexCount) {
+    width = newWidth;
+    depth = newDepth;
+    cellSize = newCellSize;
+    vertices.assign(newVertices, newVertices + vertexCount);
+    indices.assign(newIndices, newIndices + indexCount);
+    setupBuffers();
+}
+
 void Terrain::draw() {
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);

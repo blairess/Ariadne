@@ -10,11 +10,13 @@
 #include "core/terrain/terrain.h"
 #include "core/camera/camera.h"
 #include "core/render/render-modes.h"
+#include "core/modules/module_registry.h"
 #include "tools/raise_lower_brush/raise_lower_brush.h"
 #include "tools/smooth_brush/smooth_brush.h"
 #include "core/history/history_manager.h"
 #include "ui/navigation/top_bar.h"
 #include "ui/navigation/tool_bar.h"
+
 
 // Global Camera Settings
 Camera camera(glm::vec3(0.0f, 2.0f, 5.0f));
@@ -187,6 +189,11 @@ int main()
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
+    // Load drop-in modules
+    ModuleRegistry::instance().loadModulesNextToExecutable();
+    ModuleRegistry::instance().loadConfig();
+    ModuleRegistry::instance().initAll();
+
     // Vertex Shader using View and Projection Matrices
     const char* vertexShaderSource = "#version 330 core \n"
         "layout (location = 0) in vec3 aPos; \n"
@@ -293,8 +300,10 @@ int main()
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
 
-        // Draw Terrain using active Render Mode (SOLID / WIREFRAME / SOLID_WITH_WIREFRAME)
-        renderMode.render(myTerrain, colorLoc);
+        // Draw through the active drop-in renderer, or fall back to the built-in mode.
+        if (!ModuleRegistry::instance().renderActiveModule(myTerrain, colorLoc)) {
+            renderMode.render(myTerrain, colorLoc);
+        }
 
         // Draw Brush visual circle using current active brush's radius
         bool isRightMouseDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
@@ -302,7 +311,8 @@ int main()
         {
             std::vector<float> circleVertices;
             int segments = 64;
-            float radius = activeBrush ? activeBrush->radius : 1.0f;
+            const auto* moduleBrush = ModuleRegistry::instance().getActiveBrushModule();
+            float radius = moduleBrush ? ModuleRegistry::instance().getActiveBrushRadius() : (activeBrush ? activeBrush->radius : 1.0f);
             for (int i = 0; i <= segments; ++i)
             {
                 float angle = 2.0f * 3.1415926535f * i / segments;
@@ -333,8 +343,11 @@ int main()
         ImGui::NewFrame();
 
         // Render user interface components
-        topBar.render(window, historyManager);
+        topBar.render(window, historyManager, myTerrain);
         toolBar.render();
+
+        // Render module panels
+        ModuleRegistry::instance().renderPanels();
 
         // Render ImGui draw data
         ImGui::Render();
@@ -342,6 +355,9 @@ int main()
 
         glfwSwapBuffers(window);
     }
+
+    // Shutdown module system
+    ModuleRegistry::instance().shutdownAll();
 
     // Clean up ImGui resources
     ImGui_ImplOpenGL3_Shutdown();
@@ -398,11 +414,13 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     {
         currentToolType = ToolType::RaiseLower;
         activeBrush = &raiseLowerBrush;
+        ModuleRegistry::instance().setActiveBrushModule(nullptr);
     }
     if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
     {
         currentToolType = ToolType::Smooth;
         activeBrush = &smoothBrush;
+        ModuleRegistry::instance().setActiveBrushModule(nullptr);
     }
 
     // Toggle Window Maximize with 'P' key (Edge Triggered)
@@ -453,9 +471,14 @@ void processInput(GLFWwindow* window, Terrain& terrain)
             beforeVertices = terrain.getVertices();
         }
 
-        if (brushHit && activeBrush != nullptr)
+        if (brushHit)
         {
-            activeBrush->apply(terrain, brushHitPoint, deltaTime);
+            if (ModuleRegistry::instance().getActiveBrushModule() != nullptr) {
+                ModuleRegistry::instance().applyActiveBrush(terrain, brushHitPoint.x, brushHitPoint.y, brushHitPoint.z,
+                    deltaTime, glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
+            } else if (activeBrush != nullptr) {
+                activeBrush->apply(terrain, brushHitPoint, deltaTime);
+            }
         }
     }
     else

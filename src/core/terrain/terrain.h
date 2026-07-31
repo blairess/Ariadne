@@ -25,6 +25,9 @@ public:
     void setupBuffers();
     void updateBuffers();
     void draw();
+    void replaceMesh(int newWidth, int newDepth, float newCellSize,
+        const float* newVertices, size_t vertexCount,
+        const int* newIndices, size_t indexCount);
 
     std::vector<float>& getVertices() { return vertices; }
 };

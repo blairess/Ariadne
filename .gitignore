@@ -275,26 +275,20 @@ ServiceFabricBackup/
 *- [Bb]ackup ([0-9]).rdl
 *- [Bb]ackup ([0-9][0-9]).rdl
 
-# Microsoft Fakes
 FakesAssemblies/
 
-# GhostDoc plugin setting file
 *.GhostDoc.xml
 
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
 
-# Visual Studio 6 build log
 *.plg
 
-# Visual Studio 6 workspace options file
 *.opt
 
-# Visual Studio 6 auto-generated workspace file (contains which files were open etc.)
 *.vbw
 
-# Visual Studio LightSwitch build output
 **/*.HTMLClient/GeneratedArtifacts
 **/*.DesktopClient/GeneratedArtifacts
 **/*.DesktopClient/ModelManifest.xml
@@ -315,10 +309,6 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
-
-# Cake - Uncomment if you are using it
-# tools/**
-# !tools/packages.config
 
 # Tabs Studio
 *.tss
@@ -362,8 +352,10 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# CMake and Visual Studio build outputs
 out/
 build/
 bin/
 *.exe
+
+/modules/*
+!/modules/README.md
