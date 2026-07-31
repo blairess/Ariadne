@@ -1,3 +1,4 @@
+/*
 #include "module_registry.h"
 
 #include "core/terrain/terrain.h"
@@ -851,4 +852,5 @@ void ModuleRegistry::renderDrawTerrain(void* userData) {
     if (context != nullptr && context->terrain != nullptr) {
         context->terrain->draw();
     }
-}
+} 
+*/

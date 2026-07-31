@@ -1,3 +1,6 @@
+/*
+* FUTURE
+
 #pragma once
 
 // Ariadnis module SDK
@@ -154,3 +157,4 @@ typedef const AriadnisModuleApi* (*AriadnisGetModuleApiFn)(void);
 
 // Every module DLL must export exactly this function.
 ARIADNIS_MODULE_EXPORT const AriadnisModuleApi* Ariadnis_GetModuleApi(void);
+*/

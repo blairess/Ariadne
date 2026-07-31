@@ -16,7 +16,7 @@ namespace Core::Tools {
 
         // Brush parameters
         float radius = 0.3f;
-        float strength = 2.0f;
+        float strength = 1.0f;
     };
 
 }

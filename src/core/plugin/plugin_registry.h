@@ -1,3 +1,5 @@
+/*
+
 #pragma once
 
 #include <ariadnis/module_api.h>
@@ -83,3 +85,5 @@ private:
     LoadedModule* m_activeRenderModule = nullptr;
     bool m_initialized = false;
 };
+
+*/

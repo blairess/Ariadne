@@ -10,13 +10,11 @@
 #include "core/terrain/terrain.h"
 #include "core/camera/camera.h"
 #include "core/render/render-modes.h"
-#include "core/modules/module_registry.h"
 #include "tools/raise_lower_brush/raise_lower_brush.h"
 #include "tools/smooth_brush/smooth_brush.h"
 #include "core/history/history_manager.h"
 #include "ui/navigation/top_bar.h"
 #include "ui/navigation/tool_bar.h"
-
 
 // Global Camera Settings
 Camera camera(glm::vec3(0.0f, 2.0f, 5.0f));
@@ -24,7 +22,7 @@ float lastX = 800.0f / 2.0f;
 float lastY = 600.0f / 2.0f;
 bool firstMouse = true;
 
-// Tool Types
+// Active Tool Selection Enum
 enum class ToolType {
     RaiseLower,
     Smooth
@@ -36,7 +34,7 @@ ToolType currentToolType = ToolType::RaiseLower;
 TerrainRenderMode renderMode;
 Core::Tools::RaiseLowerBrush raiseLowerBrush;
 Core::Tools::SmoothBrush smoothBrush;
-Core::Tools::Brush* activeBrush = &raiseLowerBrush; // Pointer to active tool
+Core::Tools::Brush* activeBrush = &raiseLowerBrush; // Active polymorphic brush pointer
 
 HistoryManager historyManager;
 
@@ -189,11 +187,6 @@ int main()
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    // Load drop-in modules
-    ModuleRegistry::instance().loadModulesNextToExecutable();
-    ModuleRegistry::instance().loadConfig();
-    ModuleRegistry::instance().initAll();
-
     // Vertex Shader using View and Projection Matrices
     const char* vertexShaderSource = "#version 330 core \n"
         "layout (location = 0) in vec3 aPos; \n"
@@ -300,19 +293,16 @@ int main()
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
 
-        // Draw through the active drop-in renderer, or fall back to the built-in mode.
-        if (!ModuleRegistry::instance().renderActiveModule(myTerrain, colorLoc)) {
-            renderMode.render(myTerrain, colorLoc);
-        }
+        // Draw Terrain using active Render Mode (SOLID / WIREFRAME / SOLID_WITH_WIREFRAME)
+        renderMode.render(myTerrain, colorLoc);
 
-        // Draw Brush visual circle using current active brush's radius
+        // Draw Brush visual circle (reflects current active brush radius)
         bool isRightMouseDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
-        if (brushHit && !isRightMouseDown && !ImGui::GetIO().WantCaptureMouse)
+        if (brushHit && !isRightMouseDown && !ImGui::GetIO().WantCaptureMouse && activeBrush != nullptr)
         {
             std::vector<float> circleVertices;
             int segments = 64;
-            const auto* moduleBrush = ModuleRegistry::instance().getActiveBrushModule();
-            float radius = moduleBrush ? ModuleRegistry::instance().getActiveBrushRadius() : (activeBrush ? activeBrush->radius : 1.0f);
+            float radius = activeBrush->radius;
             for (int i = 0; i <= segments; ++i)
             {
                 float angle = 2.0f * 3.1415926535f * i / segments;
@@ -346,18 +336,12 @@ int main()
         topBar.render(window, historyManager, myTerrain);
         toolBar.render();
 
-        // Render module panels
-        ModuleRegistry::instance().renderPanels();
-
         // Render ImGui draw data
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
     }
-
-    // Shutdown module system
-    ModuleRegistry::instance().shutdownAll();
 
     // Clean up ImGui resources
     ImGui_ImplOpenGL3_Shutdown();
@@ -409,20 +393,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     // Handle Render Mode Toggles
     renderMode.handleInput(window);
 
-    // Switch Tools via keyboard shortcuts: '1' for Raise/Lower, '2' for Smooth
-    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
-    {
-        currentToolType = ToolType::RaiseLower;
-        activeBrush = &raiseLowerBrush;
-        ModuleRegistry::instance().setActiveBrushModule(nullptr);
-    }
-    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
-    {
-        currentToolType = ToolType::Smooth;
-        activeBrush = &smoothBrush;
-        ModuleRegistry::instance().setActiveBrushModule(nullptr);
-    }
-
     // Toggle Window Maximize with 'P' key (Edge Triggered)
     static bool pKeyPressedLastFrame = false;
     bool pKeyDown = (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS);
@@ -432,7 +402,17 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     }
     pKeyPressedLastFrame = pKeyDown;
 
-    // Toggle Raise/Lower direction with Left Shift
+    // --- TOOL SELECTION SHORTCUTS ---
+    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+        currentToolType = ToolType::RaiseLower;
+        activeBrush = &raiseLowerBrush;
+    }
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
+        currentToolType = ToolType::Smooth;
+        activeBrush = &smoothBrush;
+    }
+
+    // Toggle Raise/Lower with Left Shift
     raiseLowerBrush.isLowering = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
 
     // Prevent sculpting / raycasting when interacting with ImGui UI
@@ -471,14 +451,10 @@ void processInput(GLFWwindow* window, Terrain& terrain)
             beforeVertices = terrain.getVertices();
         }
 
-        if (brushHit)
+        if (brushHit && activeBrush != nullptr)
         {
-            if (ModuleRegistry::instance().getActiveBrushModule() != nullptr) {
-                ModuleRegistry::instance().applyActiveBrush(terrain, brushHitPoint.x, brushHitPoint.y, brushHitPoint.z,
-                    deltaTime, glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
-            } else if (activeBrush != nullptr) {
-                activeBrush->apply(terrain, brushHitPoint, deltaTime);
-            }
+            // Apply whichever brush is currently active (RaiseLower or Smooth)
+            activeBrush->apply(terrain, brushHitPoint, deltaTime);
         }
     }
     else

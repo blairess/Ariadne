@@ -4,148 +4,184 @@
 #include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "../../core/history/history_manager.h"
-#include "../../core/modules/module_registry.h"
+#include "../../core/terrain/terrain.h"
+#include "../../core/io/export/obj_exporter.h"
 
 #include <string>
+#include <cstdlib>
 
-class Terrain;
+#if defined(_WIN32)
+#include <windows.h>
+#include <shlobj.h>
+#endif
 
 namespace UI {
-class TopBar {
-public:
-    void render(GLFWwindow* window, HistoryManager& history, Terrain& terrain) {
-        if (!ImGui::BeginMainMenuBar()) {
-            return;
-        }
 
-        auto& registry = ModuleRegistry::instance();
+	// Tracks which sub-window is currently open
+	enum class ActiveModal {
+		None,
+		ProjectSettings,
+		Customization
+	};
 
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New Project")) {
-                // TODO: project persistence is outside the module system.
-            }
-            if (ImGui::MenuItem("Open Project")) {
-                // TODO: project persistence is outside the module system.
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Save")) {
-                // TODO: project persistence is outside the module system.
-            }
-            if (ImGui::MenuItem("Save As...")) {
-                // TODO: project persistence is outside the module system.
-            }
-            ImGui::Separator();
+	class TopBar {
+	private:
+		// Holds the active window state for this bar
+		ActiveModal m_ActiveModal = ActiveModal::None;
+		bool m_RoundingApplied = false;
 
-            const auto importModules = registry.getModulesByType(ARIADNIS_MODULE_IMPORTER);
-            if (ImGui::BeginMenu("Import...", !importModules.empty())) {
-                for (auto* module : importModules) {
-                    for (const auto& extension : registry.getSupportedExtensions(*module)) {
-                        const std::string label = std::string(module->api->name) + " (" + extension + ")##" + module->api->id + extension;
-                        if (ImGui::MenuItem(label.c_str())) {
-                            if (registry.importTerrain(*module, terrain, extension)) {
-                                history.clear();
-                            }
-                        }
-                    }
-                }
-                ImGui::EndMenu();
-            }
+		// Dynamically resolves the path to the user's Desktop folder
+		std::string getDesktopPath() {
+#if defined(_WIN32)
+			char desktopPath[MAX_PATH];
+			if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, desktopPath))) {
+				return std::string(desktopPath);
+			}
+			return "."; // Fallback to executable folder if lookup fails   !!! THE EXPORT OBJ IS CURRENLY ONLY DESKTOP !!!
+#else
+			const char* homeDir = std::getenv("HOME");
+			if (homeDir) {
+				return std::string(homeDir) + "/Desktop";
+			}
+			return ".";
+#endif
+		}
 
-            const auto exportModules = registry.getModulesByType(ARIADNIS_MODULE_EXPORTER);
-            if (ImGui::BeginMenu("Export...", !exportModules.empty())) {
-                for (auto* module : exportModules) {
-                    for (const auto& extension : registry.getSupportedExtensions(*module)) {
-                        const std::string label = std::string(module->api->name) + " (" + extension + ")##" + module->api->id + extension;
-                        if (ImGui::MenuItem(label.c_str())) {
-                            registry.exportTerrain(*module, terrain, extension);
-                        }
-                    }
-                }
-                ImGui::EndMenu();
-            }
+		// Applies corner rounding to windows, buttons, and popups
+		void applyRounding() {
+			ImGuiStyle& style = ImGui::GetStyle();
+			style.WindowRounding = 6.0f;
+			style.FrameRounding = 4.0f;
+			style.PopupRounding = 6.0f;
+			style.ScrollbarRounding = 4.0f;
+			style.GrabRounding = 4.0f;
+		}
 
-            ImGui::Separator();
-            ImGui::MenuItem("Project Settings");
-            ImGui::MenuItem("Customization");
-            ImGui::Separator();
-            if (ImGui::MenuItem("Exit", "Esc")) {
-                glfwSetWindowShouldClose(window, true);
-            }
-            ImGui::EndMenu();
-        }
+	public:
+		void render(GLFWwindow* window, HistoryManager& history, const Terrain& terrain) {
 
-        if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Undo", "CTRL + Z", false, history.canUndo())) {
-                history.undo();
-            }
-            if (ImGui::MenuItem("Redo", "CTRL + Y", false, history.canRedo())) {
-                history.redo();
-            }
-            ImGui::EndMenu();
-        }
+			// Apply rounding once on the first render frame
+			if (!m_RoundingApplied) {
+				applyRounding();
+				m_RoundingApplied = true;
+			}
 
-        if (ImGui::BeginMenu("View")) {
-            ImGui::MenuItem("Edit Mode");
-            ImGui::MenuItem("Painting Mode");
-            ImGui::MenuItem("Spectator Mode");
-            ImGui::Separator();
-            if (ImGui::BeginMenu("Render Mode")) {
-                if (ImGui::MenuItem("Built-in renderer", nullptr, registry.getActiveRenderModule() == nullptr)) {
-                    registry.setActiveRenderModule(nullptr);
-                }
-                for (auto* module : registry.getModulesByType(ARIADNIS_MODULE_RENDERER)) {
-                    const std::string label = std::string(module->api->name) + "##" + module->api->id;
-                    if (ImGui::MenuItem(label.c_str(), nullptr, registry.getActiveRenderModule() == module)) {
-                        registry.setActiveRenderModule(module);
-                    }
-                }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMenu();
-        }
+			// Render the top main menu bar
+			if (ImGui::BeginMainMenuBar()) {
 
-        if (ImGui::BeginMenu("Tools")) {
-            const auto brushModules = registry.getModulesByType(ARIADNIS_MODULE_BRUSH);
-            if (brushModules.empty()) {
-                ImGui::TextDisabled("No brush modules loaded");
-            }
-            for (auto* module : brushModules) {
-                const std::string label = std::string(module->api->name) + "##" + module->api->id;
-                if (ImGui::MenuItem(label.c_str(), nullptr, registry.getActiveBrushModule() == module)) {
-                    registry.setActiveBrushModule(module);
-                }
-            }
-            ImGui::EndMenu();
-        }
+				// File menu options
+				if (ImGui::BeginMenu("File")) {
+					if (ImGui::MenuItem("New Project")) { /* TODO */ }
+					if (ImGui::MenuItem("Open Project")) { /* TODO */ }
+					ImGui::Separator();
+					if (ImGui::MenuItem("Save")) { /* TODO */ }
+					if (ImGui::MenuItem("Save As...")) { /* TODO */ }
+					ImGui::Separator();
+					if (ImGui::MenuItem("Import...")) { /* TODO */ }
 
-        if (ImGui::BeginMenu("Help")) {
-            ImGui::MenuItem("Controls");
-            ImGui::MenuItem("Support");
-            ImGui::MenuItem("Community");
-            ImGui::Separator();
-            ImGui::MenuItem("Bug Report");
-            ImGui::EndMenu();
-        }
+					// Sub-menu with arrow on hover
+					if (ImGui::BeginMenu("Export")) {
+						if (ImGui::MenuItem("Export as .obj")) {
+							std::string desktopDir = getDesktopPath();
 
-        if (registry.hasAnyModules() && ImGui::BeginMenu("Modules")) {
-            for (const auto& module : registry.getAllModules()) {
-                bool isEnabled = module->enabled;
-                const std::string label = std::string(module->api->name) + "##" + module->api->id;
-                if (ImGui::MenuItem(label.c_str(), nullptr, &isEnabled)) {
-                    registry.setModuleEnabled(*module, isEnabled);
-                    registry.saveConfig();
-                }
-                if (ImGui::IsItemHovered()) {
-                    const std::string tooltip = "v" + std::string(module->api->version) + " - " + module->api->description;
-                    ImGui::SetTooltip("%s", tooltip.c_str());
-                }
-            }
-            ImGui::Separator();
-            ImGui::TextDisabled("Module settings are saved automatically");
-            ImGui::EndMenu();
-        }
+#if defined(_WIN32)
+							std::string fullExportPath = desktopDir + "\\exported_terrain.obj";
+#else
+							std::string fullExportPath = desktopDir + "/exported_terrain.obj";
+#endif
 
-        ImGui::EndMainMenuBar();
-    }
-};
-} // namespace UI
+							Core::IO::Export::OBJExporter::exportToFile(terrain, fullExportPath);
+						}
+						ImGui::EndMenu(); // Closes the Export sub-menu
+					}
+
+					ImGui::Separator();
+
+					// Set active modal to open Project Settings window
+					if (ImGui::MenuItem("Project Settings")) {
+						m_ActiveModal = ActiveModal::ProjectSettings;
+					}
+					// Set active modal to open Customization window
+					if (ImGui::MenuItem("Customization")) {
+						m_ActiveModal = ActiveModal::Customization;
+					}
+
+					ImGui::Separator();
+					if (ImGui::MenuItem("Exit", "Esc")) {
+						glfwSetWindowShouldClose(window, true);
+					}
+					ImGui::EndMenu();
+				}
+
+				// Edit menu options
+				if (ImGui::BeginMenu("Edit")) {
+					if (ImGui::MenuItem("Undo", "CTRL + Z", false, history.canUndo())) {
+						history.undo();
+					}
+					if (ImGui::MenuItem("Redo", "CTRL + Y", false, history.canRedo())) {
+						history.redo();
+					}
+					ImGui::EndMenu();
+				}
+
+				// View menu options
+				if (ImGui::BeginMenu("View")) {
+					if (ImGui::MenuItem("Edit Mode")) { /* TODO */ }
+					if (ImGui::MenuItem("Painting Mode")) { /* TODO */ }
+					if (ImGui::MenuItem("Spectator Mode")) { /* TODO */ }
+					ImGui::EndMenu();
+				}
+
+				// Help menu options
+				if (ImGui::BeginMenu("Help")) {
+					if (ImGui::MenuItem("Controls")) { /* TODO */ }
+					if (ImGui::MenuItem("Support")) { /* TODO */ }
+					if (ImGui::MenuItem("Community")) { /* TODO */ }
+					ImGui::Separator();
+					if (ImGui::MenuItem("Bug Report")) { /* TODO */ }
+					ImGui::EndMenu();
+				}
+
+				ImGui::EndMainMenuBar();
+			}
+
+			// Render active sub-window if one is open
+			renderActiveModal();
+		}
+
+	private:
+		// Handles drawing the active window
+		void renderActiveModal() {
+			// Do nothing if no window is open
+			if (m_ActiveModal == ActiveModal::None) return;
+
+			bool keepOpen = true;
+			// NoCollapse removes arrow, AlwaysAutoResize fits contents
+			ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize;
+
+			switch (m_ActiveModal) {
+			case ActiveModal::ProjectSettings:
+				if (ImGui::Begin("Project Settings", &keepOpen, windowFlags)) {
+					ImGui::Text("Project Configurations");
+				}
+				ImGui::End();
+				break;
+
+			case ActiveModal::Customization:
+				if (ImGui::Begin("Customization", &keepOpen, windowFlags)) {
+					ImGui::Text("Customization Options");
+				}
+				ImGui::End();
+				break;
+
+			default:
+				break;
+			}
+
+			// Reset to None when window 'X' button is clicked
+			if (!keepOpen) {
+				m_ActiveModal = ActiveModal::None;
+			}
+		}
+	};
+}
