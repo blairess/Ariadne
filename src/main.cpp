@@ -474,8 +474,15 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     // Handle Undo / Redo keyboard shortcuts when not actively sculpting
     if (!isSculpting)
     {
-        static bool zPressedLastFrame = false;
-        static bool yPressedLastFrame = false;
+        static double undoTimer = 0.0;
+        static double redoTimer = 0.0;
+        static bool undoHeld = false;
+        static bool redoHeld = false;
+
+        const double INITIAL_DELAY = 0.35; // Initial delay before continuous repeating (350ms)
+        const double REPEAT_RATE = 0.10; // Repeating speed once held
+
+        double currentTime = glfwGetTime();
 
         bool ctrlDown = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) ||
             (glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
@@ -483,17 +490,45 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         bool zDown = (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS);
         bool yDown = (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS);
 
-        if (ctrlDown && zDown && !zPressedLastFrame)
+        // UNDO (Ctrl + Z)
+        if (ctrlDown && zDown)
         {
-            historyManager.undo();
+            if (!undoHeld)
+            {
+                historyManager.undo();
+                undoHeld = true;
+                undoTimer = currentTime + INITIAL_DELAY;
+            }
+            else if (currentTime >= undoTimer)
+            {
+                historyManager.undo();
+                undoTimer = currentTime + REPEAT_RATE;
+            }
         }
-        if (ctrlDown && yDown && !yPressedLastFrame)
+        else
         {
-            historyManager.redo();
+            undoHeld = false;
         }
 
-        zPressedLastFrame = zDown;
-        yPressedLastFrame = yDown;
+        // REDO (Ctrl + Y)
+        if (ctrlDown && yDown)
+        {
+            if (!redoHeld)
+            {
+                historyManager.redo();
+                redoHeld = true;
+                redoTimer = currentTime + INITIAL_DELAY;
+            }
+            else if (currentTime >= redoTimer)
+            {
+                historyManager.redo();
+                redoTimer = currentTime + REPEAT_RATE;
+            }
+        }
+        else
+        {
+            redoHeld = false;
+        }
     }
 }
 
