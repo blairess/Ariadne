@@ -511,8 +511,12 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
 
-    // Only rotate camera if RIGHT mouse button is held down
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+    // Disable camera rotation if Q or E is held down to adjust brush settings
+    bool qPressed = (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS);
+    bool ePressed = (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS);
+
+    // Only rotate camera if RIGHT mouse button is held down (and not holding Q or E)
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && !qPressed && !ePressed)
     {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -541,5 +545,42 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 // Mouse scroll callback
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
+    // Ignore input if interacting with UI
+    if (ImGui::GetIO().WantCaptureMouse)
+        return;
+
+    bool qPressed = (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS);
+    bool ePressed = (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS);
+
+    if (activeBrush != nullptr && (qPressed || ePressed))
+    {
+        float scrollDelta = static_cast<float>(yoffset);
+
+        // Adjust Radius when holding Q
+        if (qPressed)
+        {
+            float radiusStep = 0.2f;
+            activeBrush->radius += scrollDelta * radiusStep;
+
+            // Clamp radius between 0.1 and 20.0
+            if (activeBrush->radius < 0.1f) activeBrush->radius = 0.1f;
+            if (activeBrush->radius > 20.0f) activeBrush->radius = 20.0f;
+        }
+
+        // Adjust Strength when holding E
+        if (ePressed)
+        {
+            float strengthStep = 0.1f;
+            activeBrush->strength += scrollDelta * strengthStep;
+
+            // Clamp strength between 0.05 and 10.0
+            if (activeBrush->strength < 0.05f) activeBrush->strength = 0.05f;
+            if (activeBrush->strength > 10.0f) activeBrush->strength = 10.0f;
+        }
+
+        return; // Prevent camera zoom while holding Q or E
+    }
+
+    // Default camera scroll behavior
     camera.processMouseScroll(static_cast<float>(yoffset));
 }

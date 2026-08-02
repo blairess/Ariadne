@@ -18,6 +18,9 @@
 * **Left Shift + Left Click** - Invert Brush (Lower Terrain)
 * **2** - Smooth Brush
 
+* **Hold Q + Scroll Mouse Wheel** - Adjust Brush Size (Radius)
+* **Hold E + Scroll Mouse Wheel** - Adjust Brush Strenght
+
 ### Render Modes
 * **O** - Cycle Render Mode (Solid / Wireframe / Hybrid)
 
