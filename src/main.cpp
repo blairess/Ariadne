@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <vector>
+#include <cmath>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -89,7 +90,7 @@ bool raycastToTerrainPlane(Camera& cam, float screenX, float screenY, int width,
     return true;
 }
 
-// Bilinear interpolation helper to get the terrain height at any (x, z) coordinate
+// Bilinear interpolation helper to get terrain height at any (x, z) coordinate
 float getTerrainHeight(const Terrain& terrain, float x, float z) {
     float max_x = (terrain.width - 1) * terrain.cellSize;
     float max_z = (terrain.depth - 1) * terrain.cellSize;
@@ -174,12 +175,12 @@ int main()
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // Scale all UI text dynamically (1.25f = 125% scale)
+    // Scale UI text dynamically
     io.FontGlobalScale = 1.25f;
 
     ImGuiStyle& style = ImGui::GetStyle();
-    style.FramePadding = ImVec2(12.0f, 10.0f);  // Vertical and horizontal padding
-    style.ItemSpacing = ImVec2(10.0f, 8.0f);    // Spacing between UI items
+    style.FramePadding = ImVec2(12.0f, 10.0f);
+    style.ItemSpacing = ImVec2(10.0f, 8.0f);
 
     ImGui::StyleColorsDark();
 
@@ -255,13 +256,13 @@ int main()
     myTerrain.generateMesh();
     myTerrain.setupBuffers();
 
-    // Setup Brush Circle buffers
+    // Setup Brush Circle buffers for 2 circles (Outer = Radius, Inner = Noggit Falloff Indicator)
     unsigned int circleVAO, circleVBO;
     glGenVertexArrays(1, &circleVAO);
     glGenBuffers(1, &circleVBO);
     glBindVertexArray(circleVAO);
     glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
-    glBufferData(GL_ARRAY_BUFFER, 65 * 3 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 130 * 3 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -285,7 +286,7 @@ int main()
 
         glUseProgram(shaderProgram);
 
-        // Dynamic aspect ratio calculation based on current viewport size
+        // Dynamic aspect ratio calculation
         float aspectRatio = static_cast<float>(windowWidth) / static_cast<float>(windowHeight > 0 ? windowHeight : 1);
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspectRatio, 0.1f, 100.0f);
         glm::mat4 view = camera.GetViewMatrix();
@@ -293,62 +294,92 @@ int main()
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
 
-        // Draw Terrain using active Render Mode (SOLID / WIREFRAME / SOLID_WITH_WIREFRAME)
+        // Draw Terrain using active Render Mode
         renderMode.render(myTerrain, colorLoc);
 
-        // Draw Brush visual circle (reflects current active brush radius)
+        // Draw Noggit-style Dual Brush Circles (Outer: Radius, Inner: Strength Falloff)
         bool isRightMouseDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
         if (brushHit && !isRightMouseDown && !ImGui::GetIO().WantCaptureMouse && activeBrush != nullptr)
         {
             std::vector<float> circleVertices;
             int segments = 64;
-            float radius = activeBrush->radius;
+
+            // Strength Mapping Limits: [0.01f, 3.0f]
+            float minStrength = 0.01f;
+            float maxStrength = 3.0f;
+
+            // Normalize active strength into a smooth percentage ratio
+            float strengthNormalized = (activeBrush->strength - minStrength) / (maxStrength - minStrength);
+            strengthNormalized = glm::clamp(strengthNormalized, 0.01f, 0.98f);
+
+            float outerRadius = activeBrush->radius;
+            float innerRadius = outerRadius * strengthNormalized;
+
+            // 1. Outer Radius Circle (Cyan)
             for (int i = 0; i <= segments; ++i)
             {
                 float angle = 2.0f * 3.1415926535f * i / segments;
-                float cx = brushHitPoint.x + radius * std::cos(angle);
-                float cz = brushHitPoint.z + radius * std::sin(angle);
-                float cy = getTerrainHeight(myTerrain, cx, cz) + 0.005f; // small offset to prevent z-fighting
+                float cx = brushHitPoint.x + outerRadius * std::cos(angle);
+                float cz = brushHitPoint.z + outerRadius * std::sin(angle);
+                float cy = getTerrainHeight(myTerrain, cx, cz) + 0.005f;
                 circleVertices.push_back(cx);
                 circleVertices.push_back(cy);
                 circleVertices.push_back(cz);
             }
 
+            // 2. Inner Strength Circle (Noggit Red / Orange)
+            for (int i = 0; i <= segments; ++i)
+            {
+                float angle = 2.0f * 3.1415926535f * i / segments;
+                float cx = brushHitPoint.x + innerRadius * std::cos(angle);
+                float cz = brushHitPoint.z + innerRadius * std::sin(angle);
+                float cy = getTerrainHeight(myTerrain, cx, cz) + 0.005f;
+                circleVertices.push_back(cx);
+                circleVertices.push_back(cy);
+                circleVertices.push_back(cz);
+            }
+
+            // Upload circle data to OpenGL dynamic VBO
             glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
             glBufferSubData(GL_ARRAY_BUFFER, 0, circleVertices.size() * sizeof(float), circleVertices.data());
             glBindBuffer(GL_ARRAY_BUFFER, 0);
 
             glUseProgram(shaderProgram);
-            glUniform4f(colorLoc, 0.0f, 0.75f, 1.0f, 1.0f); // Cyan color
             glLineWidth(2.0f);
             glBindVertexArray(circleVAO);
+
+            // Draw Outer Ring (Cyan)
+            glUniform4f(colorLoc, 0.0f, 0.8f, 1.0f, 1.0f);
             glDrawArrays(GL_LINE_STRIP, 0, segments + 1);
+
+            // Draw Inner Falloff Ring (Noggit Red / Orange)
+            glUniform4f(colorLoc, 1.0f, 0.35f, 0.1f, 1.0f);
+            glDrawArrays(GL_LINE_STRIP, segments + 1, segments + 1);
+
             glBindVertexArray(0);
-            glLineWidth(1.0f); // Reset line width
+            glLineWidth(1.0f);
         }
 
-        // Start ImGui frame
+        // ImGui frame rendering
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Render user interface components
         topBar.render(window, historyManager, myTerrain);
         toolBar.render();
 
-        // Render ImGui draw data
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
     }
 
-    // Clean up ImGui resources
+    // Clean up ImGui
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    // Clean up OpenGL resources
+    // Clean up OpenGL objects
     glDeleteVertexArrays(1, &circleVAO);
     glDeleteBuffers(1, &circleVBO);
     glDeleteProgram(shaderProgram);
@@ -357,21 +388,17 @@ int main()
     return 0;
 }
 
-// Window Maximize/Restore helper
+// Window Maximize toggle
 void toggleMaximize(GLFWwindow* window)
 {
     isMaximized = !isMaximized;
     if (isMaximized)
-    {
         glfwMaximizeWindow(window);
-    }
     else
-    {
         glfwRestoreWindow(window);
-    }
 }
 
-// Input Function
+// Input Handling
 void processInput(GLFWwindow* window, Terrain& terrain)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -390,10 +417,9 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS)
         camera.processKeyboard(CameraMovement::DOWN, deltaTime);
 
-    // Handle Render Mode Toggles
     renderMode.handleInput(window);
 
-    // Toggle Window Maximize with 'P' key (Edge Triggered)
+    // Toggle Window Maximize with 'P'
     static bool pKeyPressedLastFrame = false;
     bool pKeyDown = (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS);
     if (pKeyDown && !pKeyPressedLastFrame)
@@ -402,7 +428,7 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     }
     pKeyPressedLastFrame = pKeyDown;
 
-    // --- TOOL SELECTION SHORTCUTS ---
+    // Tool shortcuts
     if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
         currentToolType = ToolType::RaiseLower;
         activeBrush = &raiseLowerBrush;
@@ -412,17 +438,15 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         activeBrush = &smoothBrush;
     }
 
-    // Toggle Raise/Lower with Left Shift
+    // Invert raise/lower direction with Shift
     raiseLowerBrush.isLowering = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
 
-    // Prevent sculpting / raycasting when interacting with ImGui UI
     if (ImGui::GetIO().WantCaptureMouse)
     {
         brushHit = false;
         return;
     }
 
-    // Get current hit point under the mouse
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
     brushHit = raycastToTerrainPlane(camera, static_cast<float>(mouseX), static_cast<float>(mouseY), windowWidth, windowHeight, brushHitPoint);
@@ -437,7 +461,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         }
     }
 
-    // Track sculpt state and handle Undo/Redo history
     static bool isSculpting = false;
     static std::vector<float> beforeVertices;
 
@@ -453,7 +476,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
 
         if (brushHit && activeBrush != nullptr)
         {
-            // Apply whichever brush is currently active (RaiseLower or Smooth)
             activeBrush->apply(terrain, brushHitPoint, deltaTime);
         }
     }
@@ -471,7 +493,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         }
     }
 
-    // Handle Undo / Redo keyboard shortcuts when not actively sculpting
     if (!isSculpting)
     {
         static double undoTimer = 0.0;
@@ -479,8 +500,8 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         static bool undoHeld = false;
         static bool redoHeld = false;
 
-        const double INITIAL_DELAY = 0.35; // Initial delay before continuous repeating (350ms)
-        const double REPEAT_RATE = 0.10; // Repeating speed once held
+        const double INITIAL_DELAY = 0.35;
+        const double REPEAT_RATE = 0.10;
 
         double currentTime = glfwGetTime();
 
@@ -490,7 +511,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         bool zDown = (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS);
         bool yDown = (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS);
 
-        // UNDO (Ctrl + Z)
         if (ctrlDown && zDown)
         {
             if (!undoHeld)
@@ -510,7 +530,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
             undoHeld = false;
         }
 
-        // REDO (Ctrl + Y)
         if (ctrlDown && yDown)
         {
             if (!redoHeld)
@@ -532,7 +551,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     }
 }
 
-// Frame buffer Handles resizing/fullscreen toggling
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
@@ -540,17 +558,14 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     windowHeight = height;
 }
 
-// Mouse movement callback
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
     float ypos = static_cast<float>(yposIn);
 
-    // Disable camera rotation if Q or E is held down to adjust brush settings
     bool qPressed = (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS);
     bool ePressed = (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS);
 
-    // Only rotate camera if RIGHT mouse button is held down (and not holding Q or E)
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && !qPressed && !ePressed)
     {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -577,10 +592,8 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
     }
 }
 
-// Mouse scroll callback
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    // Ignore input if interacting with UI
     if (ImGui::GetIO().WantCaptureMouse)
         return;
 
@@ -591,31 +604,24 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
     {
         float scrollDelta = static_cast<float>(yoffset);
 
-        // Adjust Radius when holding Q
+        // Adjust Outer Radius (Q + Scroll)
         if (qPressed)
         {
-            float radiusStep = 0.2f;
-            activeBrush->radius += scrollDelta * radiusStep;
-
-            // Clamp radius between 0.1 and 20.0
-            if (activeBrush->radius < 0.1f) activeBrush->radius = 0.1f;
-            if (activeBrush->radius > 20.0f) activeBrush->radius = 20.0f;
+            float scaleFactor = 1.0f + (scrollDelta * 0.05f);
+            activeBrush->radius *= scaleFactor;
+            activeBrush->radius = glm::clamp(activeBrush->radius, 0.05f, 100.0f);
         }
 
-        // Adjust Strength when holding E
+        // Adjust Inner Falloff / Strength (E + Scroll) — Upper Limit 3.0f
         if (ePressed)
         {
-            float strengthStep = 0.1f;
-            activeBrush->strength += scrollDelta * strengthStep;
-
-            // Clamp strength between 0.05 and 10.0
-            if (activeBrush->strength < 0.05f) activeBrush->strength = 0.05f;
-            if (activeBrush->strength > 10.0f) activeBrush->strength = 10.0f;
+            float scaleFactor = 1.0f + (scrollDelta * 0.05f);
+            activeBrush->strength *= scaleFactor;
+            activeBrush->strength = glm::clamp(activeBrush->strength, 0.01f, 3.0f);
         }
 
         return; // Prevent camera zoom while holding Q or E
     }
 
-    // Default camera scroll behavior
     camera.processMouseScroll(static_cast<float>(yoffset));
 }
