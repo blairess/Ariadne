@@ -8,12 +8,6 @@
 #include "../../core/io/export/obj_exporter.h"
 
 #include <string>
-#include <cstdlib>
-
-#if defined(_WIN32)
-#include <windows.h>
-#include <shlobj.h>
-#endif
 
 namespace UI {
 
@@ -29,23 +23,6 @@ namespace UI {
 		// Holds the active window state for this bar
 		ActiveModal m_ActiveModal = ActiveModal::None;
 		bool m_RoundingApplied = false;
-
-		// Dynamically resolves the path to the user's Desktop folder
-		std::string getDesktopPath() {
-#if defined(_WIN32)
-			char desktopPath[MAX_PATH];
-			if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, desktopPath))) {
-				return std::string(desktopPath);
-			}
-			return "."; // Fallback to executable folder if lookup fails   !!! THE EXPORT OBJ IS CURRENLY ONLY DESKTOP !!!
-#else
-			const char* homeDir = std::getenv("HOME");
-			if (homeDir) {
-				return std::string(homeDir) + "/Desktop";
-			}
-			return ".";
-#endif
-		}
 
 		// Applies corner rounding to windows, buttons, and popups
 		void applyRounding() {
@@ -82,15 +59,7 @@ namespace UI {
 					// Sub-menu with arrow on hover
 					if (ImGui::BeginMenu("Export")) {
 						if (ImGui::MenuItem("Export as .obj")) {
-							std::string desktopDir = getDesktopPath();
-
-#if defined(_WIN32)
-							std::string fullExportPath = desktopDir + "\\exported_terrain.obj";
-#else
-							std::string fullExportPath = desktopDir + "/exported_terrain.obj";
-#endif
-
-							Core::IO::Export::OBJExporter::exportToFile(terrain, fullExportPath);
+							Core::IO::Export::OBJExporter::exportWithDialog(terrain);
 						}
 						ImGui::EndMenu(); // Closes the Export sub-menu
 					}

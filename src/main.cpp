@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <nfd.hpp>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -14,6 +15,7 @@
 #include "tools/raise_lower_brush/raise_lower_brush.h"
 #include "tools/smooth_brush/smooth_brush.h"
 #include "core/history/history_manager.h"
+#include "core/io/export/obj_exporter.h" // Include OBJ Exporter
 #include "ui/navigation/top_bar.h"
 #include "ui/navigation/tool_bar.h"
 
@@ -428,6 +430,18 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     }
     pKeyPressedLastFrame = pKeyDown;
 
+    // Export OBJ via Native File Dialog (Ctrl + E)
+    static bool eExportPressedLastFrame = false;
+    bool ctrlDown = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) ||
+        (glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
+    bool eKeyDown = (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS);
+
+    if (ctrlDown && eKeyDown && !eExportPressedLastFrame)
+    {
+        Core::IO::Export::OBJExporter::exportWithDialog(terrain);
+    }
+    eExportPressedLastFrame = (ctrlDown && eKeyDown);
+
     // Tool shortcuts
     if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
         currentToolType = ToolType::RaiseLower;
@@ -504,9 +518,6 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         const double REPEAT_RATE = 0.10;
 
         double currentTime = glfwGetTime();
-
-        bool ctrlDown = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) ||
-            (glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
 
         bool zDown = (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS);
         bool yDown = (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS);

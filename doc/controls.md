@@ -29,5 +29,6 @@
 
 * **CTRL+Z** - Undo
 * **CTRL+Y** - Redo
+* **CTRL+E** - Export (For now only OBJ)
 
 * **P** - Toggle Fullscreen

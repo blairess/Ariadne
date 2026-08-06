@@ -28,7 +28,16 @@ FetchContent_Declare(
     GIT_TAG 1.0.1
 )
 
-FetchContent_MakeAvailable(glfw glm)
+FetchContent_Declare(
+    nativefiledialog
+    GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended
+    GIT_TAG v1.2.1
+    GIT_SHALLOW ON
+    EXCLUDE_FROM_ALL
+    SYSTEM
+)
+
+FetchContent_MakeAvailable(glfw glm nativefiledialog)
 
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/imgui")
 
@@ -40,7 +49,7 @@ add_library(imgui STATIC
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/imgui_impl_glfw.cpp
     ${IMGUI_DIR}/imgui_impl_opengl3.cpp
- "src/core/io/export/obj_exporter.h" "src/core/io/export/obj_exporter.cpp")
+)
 
 target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}
@@ -94,6 +103,7 @@ target_link_libraries(Ariadnis PRIVATE
     opengl32
     comdlg32
     imgui
+    nfd
 )
 
 install(TARGETS Ariadnis RUNTIME DESTINATION .)

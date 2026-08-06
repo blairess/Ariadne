@@ -1,8 +1,37 @@
 #include "obj_exporter.h"
 #include <fstream>
 #include <iostream>
+#include <nfd.hpp>
 
 namespace Core::IO::Export {
+
+    bool OBJExporter::exportWithDialog(const Terrain& terrain) {
+        if (NFD::Init() != NFD_OKAY) {
+            std::cerr << "[OBJExporter] Failed to initialize NFD: " << NFD::GetError() << std::endl;
+            return false;
+        }
+
+        NFD::UniquePath outPath;
+        nfdfilteritem_t filterItem[1] = { { "Wavefront OBJ Model", "obj" } };
+
+        // Opens save file dialog defaulted to "terrain.obj"
+        nfdresult_t result = NFD::SaveDialog(outPath, filterItem, 1, nullptr, "terrain.obj");
+
+        bool success = false;
+
+        if (result == NFD_OKAY) {
+            success = exportToFile(terrain, outPath.get());
+        }
+        else if (result == NFD_CANCEL) {
+            std::cout << "[OBJExporter] Export canceled by user." << std::endl;
+        }
+        else {
+            std::cerr << "[OBJExporter] NFD Error: " << NFD::GetError() << std::endl;
+        }
+
+        NFD::Quit();
+        return success;
+    }
 
     bool OBJExporter::exportToFile(const Terrain& terrain, const std::string& filePath) {
         std::ofstream outFile(filePath);
