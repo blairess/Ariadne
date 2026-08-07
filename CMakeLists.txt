@@ -48,8 +48,7 @@ add_library(imgui STATIC
     ${IMGUI_DIR}/imgui_tables.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/imgui_impl_glfw.cpp
-    ${IMGUI_DIR}/imgui_impl_opengl3.cpp
-)
+    ${IMGUI_DIR}/imgui_impl_opengl3.cpp)
 
 target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}
@@ -86,6 +85,8 @@ add_executable(Ariadnis
     src/tools/smooth_brush/smooth_brush.cpp
     src/tools/smooth_brush/smooth_brush.h
     src/tools/paint_brush/paint_brush.h
+    src/tools/flatten_brush/flatten_brush.h
+    src/tools/flatten_brush/flatten_brush.cpp
 
     src/core/paint/paint_layer.h
 

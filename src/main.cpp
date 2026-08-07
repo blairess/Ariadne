@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <memory>
 #include <nfd.hpp>
 
 #include "imgui.h"
@@ -14,8 +15,9 @@
 #include "core/render/render-modes.h"
 #include "tools/raise_lower_brush/raise_lower_brush.h"
 #include "tools/smooth_brush/smooth_brush.h"
+#include "tools/flatten_brush/flatten_brush.h"
 #include "core/history/history_manager.h"
-#include "core/io/export/obj_exporter.h" // Include OBJ Exporter
+#include "core/io/export/obj_exporter.h"
 #include "ui/navigation/top_bar.h"
 #include "ui/navigation/tool_bar.h"
 
@@ -28,7 +30,8 @@ bool firstMouse = true;
 // Active Tool Selection Enum
 enum class ToolType {
     RaiseLower,
-    Smooth
+    Smooth,
+    Flatten
 };
 
 ToolType currentToolType = ToolType::RaiseLower;
@@ -37,6 +40,7 @@ ToolType currentToolType = ToolType::RaiseLower;
 TerrainRenderMode renderMode;
 Core::Tools::RaiseLowerBrush raiseLowerBrush;
 Core::Tools::SmoothBrush smoothBrush;
+Core::Tools::FlattenBrush flattenBrush;
 Core::Tools::Brush* activeBrush = &raiseLowerBrush; // Active polymorphic brush pointer
 
 HistoryManager historyManager;
@@ -451,6 +455,10 @@ void processInput(GLFWwindow* window, Terrain& terrain)
         currentToolType = ToolType::Smooth;
         activeBrush = &smoothBrush;
     }
+    if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) {
+        currentToolType = ToolType::Flatten;
+        activeBrush = &flattenBrush;
+    }
 
     // Invert raise/lower direction with Shift
     raiseLowerBrush.isLowering = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
@@ -495,6 +503,9 @@ void processInput(GLFWwindow* window, Terrain& terrain)
     }
     else
     {
+        // Reset Flatten Brush target sample height on mouse release
+        flattenBrush.resetTarget();
+
         if (isSculpting)
         {
             isSculpting = false;
