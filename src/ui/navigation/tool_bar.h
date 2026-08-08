@@ -5,8 +5,17 @@
 #include "imgui.h"
 
 namespace UI {
+    enum class TerrainTool {
+        None,
+        RaiseLower,
+        Smooth,
+        Flatten
+    };
+
     class ToolBar {
     public:
+        ToolBar() = default;
+
         void render() {
             float topBarHeight = ImGui::GetFrameHeight();
 
@@ -15,11 +24,11 @@ namespace UI {
             float panelWidth = 60.0f; // Width for tool icons/buttons
             float panelHeight = io.DisplaySize.y - topBarHeight;
 
-            // Pin position beneath the top bar and set fixed width/height
+            // Pin position beneath top bar and lock dimensions
             ImGui::SetNextWindowPos(ImVec2(0.0f, topBarHeight), ImGuiCond_Always);
             ImGui::SetNextWindowSize(ImVec2(panelWidth, panelHeight), ImGuiCond_Always);
 
-            // Window flags to lock panel in place
+            // Lock panel flags (non-movable, non-resizable UI panel)
             ImGuiWindowFlags windowFlags =
                 ImGuiWindowFlags_NoTitleBar |
                 ImGuiWindowFlags_NoResize |
@@ -28,42 +37,64 @@ namespace UI {
                 ImGuiWindowFlags_NoBringToFrontOnFocus |
                 ImGuiWindowFlags_NoNavFocus;
 
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 6.0f));
+            // Radius is removed atm (looks bad)
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 8.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 6.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 
             if (ImGui::Begin("ToolBarPanel", nullptr, windowFlags)) {
+                const ImVec2 buttonSize(48.0f, 48.0f);
 
-                // TODO: TOOL BUTTONS
+                // Raise / Lower
+                renderToolButton("R", TerrainTool::RaiseLower, buttonSize, "Raise / Lower Brush");
+                renderSeparator();
 
-                // Raise / Lower Brush
-                if (ImGui::Button("R", ImVec2(48, 48))) {
-                    // TODO
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Raise / Lower Brush");
-                }
+                // Smooth
+                renderToolButton("S", TerrainTool::Smooth, buttonSize, "Smooth Terrain Tool");
+                renderSeparator();
 
-                ImGui::Spacing();
-
-                // Smooth Brush
-                if (ImGui::Button("S", ImVec2(48, 48))) {
-                    // Action: Select Smooth Brush
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Smooth Terrain Tool");
-                }
-
-                // Flatten Brush
-                if (ImGui::Button("F", ImVec2(48, 48))) {
-                    // Action: Select Flatten Brush
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Flatten Terrain Tool");
-                }
+                // Flatten
+                renderToolButton("F", TerrainTool::Flatten, buttonSize, "Flatten Terrain Tool");
 
                 ImGui::End();
             }
 
-            ImGui::PopStyleVar();
+            ImGui::PopStyleVar(4);
+        }
+
+        TerrainTool getActiveTool() const { return m_activeTool; }
+        void setActiveTool(TerrainTool tool) { m_activeTool = tool; }
+
+    private:
+        TerrainTool m_activeTool = TerrainTool::None;
+
+        void renderSeparator() {
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
+            ImGui::Separator();
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
+        }
+
+        void renderToolButton(const char* label, TerrainTool tool, const ImVec2& size, const char* tooltip) {
+            bool isActive = (m_activeTool == tool);
+
+            // Highlight button background if currently active
+            if (isActive) {
+                ImGuiStyle& style = ImGui::GetStyle();
+                ImVec4 activeBg = style.Colors[ImGuiCol_ButtonActive];
+                ImGui::PushStyleColor(ImGuiCol_Button, activeBg);
+            }
+
+            if (ImGui::Button(label, size)) {
+                // Toggle tool off if clicked again, otherwise activate
+                m_activeTool = isActive ? TerrainTool::None : tool;
+            }
+
+            if (isActive) {
+                ImGui::PopStyleColor();
+            }
+
+            ImGui::SetItemTooltip("%s", tooltip);
         }
     };
 }

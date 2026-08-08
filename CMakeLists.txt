@@ -78,6 +78,9 @@ add_executable(Ariadnis
 
     src/ui/navigation/top_bar.h
     src/ui/navigation/tool_bar.h
+    src/ui/navigation/properties.h
+    src/ui/main_menu/main_menu.h
+    src/ui/main_menu/main_menu.cpp
 
     src/tools/brush.h
     src/tools/raise_lower_brush/raise_lower_brush.cpp
@@ -91,7 +94,8 @@ add_executable(Ariadnis
     src/core/paint/paint_layer.h
 
     src/core/io/export/obj_exporter.h
-    src/core/io/export/obj_exporter.cpp)
+    src/core/io/export/obj_exporter.cpp
+    src/core/io/aria/aria_file.h)
 
 target_include_directories(Ariadnis PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include

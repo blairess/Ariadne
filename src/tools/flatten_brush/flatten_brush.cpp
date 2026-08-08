@@ -5,7 +5,7 @@
 namespace Core::Tools {
 
     FlattenBrush::FlattenBrush() {
-        radius = 5.0f;
+        radius = 0.3f;
         strength = 1.0f;
     }
 

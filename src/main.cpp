@@ -20,6 +20,10 @@
 #include "core/io/export/obj_exporter.h"
 #include "ui/navigation/top_bar.h"
 #include "ui/navigation/tool_bar.h"
+#include "ui/navigation/properties.h"
+
+// TODO:
+#include "core/io/aria/aria_file.h"
 
 // Global Camera Settings
 Camera camera(glm::vec3(0.0f, 2.0f, 5.0f));
@@ -258,7 +262,7 @@ int main()
     int projLoc = glGetUniformLocation(shaderProgram, "projection");
 
     // Instantiate and setup Terrain (Width, Depth, CellSize)
-    Terrain myTerrain(64, 64, 0.1f);
+    Terrain myTerrain(32, 32, 0.1f);
     myTerrain.generateMesh();
     myTerrain.setupBuffers();
 
